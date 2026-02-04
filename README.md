@@ -26,29 +26,43 @@ SkillBoss is an AI skills platform by HeyBoss (backed by an OpenAI fund) that eq
 
 ## Get Started
 
-### 1. Get API Key
+### 1. Install (Recommended: Ask Your AI Agent)
 
-Visit [skillboss.co](https://skillboss.co) to sign up and obtain your API key.
+Simply send this message to your AI agent (Claude Code, Codex, OpenClaw, etc.):
 
-### 2. Configure
-
-Replace the placeholder in `skillboss/config.json`:
-
-```json
-{
-  "apiKey": "sk-your-real-api-key-here"
-}
+```
+Please install https://github.com/heeyo-life/skillboss-skills to your skills directory.
 ```
 
-### 3. Install
+The AI will automatically clone and install SkillBoss Skills for you.
 
-#### Auto Install (macOS/Linux)
+### 2. Get API Key & Configure
+
+1. Visit [skillboss.co](https://skillboss.co) to sign up or log in
+2. Go to [skillboss.co/console](https://skillboss.co/console) to find your API key
+3. Send this message to your AI agent:
+
+```
+Please set my SkillBoss API key: sk-your-api-key-here in the skillboss config.json file.
+```
+
+Done! Your AI agent is now equipped with SkillBoss skills.
+
+---
+
+### Alternative Installation Methods
+
+<details>
+<summary>Auto Install Script (macOS/Linux)</summary>
 
 ```bash
 bash ./skillboss/install/install.sh
 ```
 
-#### Manual Install
+</details>
+
+<details>
+<summary>Manual Install</summary>
 
 Copy the `skillboss/` folder to your AI tool's skills directory:
 
@@ -68,6 +82,8 @@ Copy the `skillboss/` folder to your AI tool's skills directory:
 | Cursor | `.cursor/rules/` |
 | Windsurf | `.windsurf/rules/` |
 | Cline | `.clinerules/` |
+
+</details>
 
 ## Quick Usage
 
