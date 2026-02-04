@@ -24,6 +24,12 @@ SkillBoss is an AI skills platform by HeyBoss (backed by an OpenAI fund) that eq
 - Email sending
 - Web scraping and search
 
+<div align="center">
+
+https://github.com/user-attachments/assets/7bb8c3ff-593d-45f5-821d-9cd3fc05d33e
+
+</div>
+
 ## Get Started
 
 ### 1. Install (Recommended: Ask Your AI Agent)
