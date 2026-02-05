@@ -70,18 +70,22 @@ jobs:
           npx wrangler r2 object put skillboss/versions/${{ steps.version.outputs.version }}.zip --file=skillboss.zip
 
       - name: Notify skillboss webhook
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
+          jq -n \
+            --arg version "${{ steps.version.outputs.version }}" \
+            --arg r2_key "versions/${{ steps.version.outputs.version }}.zip" \
+            --argjson file_size ${{ steps.hash.outputs.size }} \
+            --arg file_hash "${{ steps.hash.outputs.hash }}" \
+            --arg changelog "$CHANGELOG" \
+            --arg commit_sha "${{ github.sha }}" \
+            '{version: $version, r2_key: $r2_key, file_size: $file_size, file_hash: $file_hash, changelog: $changelog, commit_sha: $commit_sha}' \
+            > payload.json
           curl -f -X POST "${{ secrets.SKILLBOSS_WEBHOOK_URL }}/api/skills/webhook/release" \
             -H "Authorization: Bearer ${{ secrets.SKILLBOSS_WEBHOOK_SECRET }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "version": "${{ steps.version.outputs.version }}",
-              "r2_key": "versions/${{ steps.version.outputs.version }}.zip",
-              "file_size": ${{ steps.hash.outputs.size }},
-              "file_hash": "${{ steps.hash.outputs.hash }}",
-              "changelog": ${{ toJson(steps.changelog.outputs.changelog) }},
-              "commit_sha": "${{ github.sha }}"
-            }'
+            -d @payload.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
