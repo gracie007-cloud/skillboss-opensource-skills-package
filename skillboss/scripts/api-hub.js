@@ -16,6 +16,7 @@ const { fetchWithRetry } = require('./lib/fetch-retry')
  * - Search: scrapingdog, perplexity, firecrawl
  * - Video: minimax
  * - Document: reducto (parse, extract, split, edit)
+ * - SMS/Verify: prelude (OTP send/check, notify)
  * - Email: aws/ses
  *
  * Usage:
@@ -26,6 +27,9 @@ const { fetchWithRetry } = require('./lib/fetch-retry')
  *   node api-hub.js image --model "replicate/black-forest-labs/flux-schnell" --prompt "A sunset" [--output image.png]
  *   node api-hub.js search --model "scrapingdog/google_search" --query "nodejs"
  *   node api-hub.js scrape --model "firecrawl/scrape" --url "https://example.com"
+ *   node api-hub.js sms-verify --phone "+1234567890"
+ *   node api-hub.js sms-check --phone "+1234567890" --code "123456"
+ *   node api-hub.js sms-send --phone "+1234567890" --template-id "your_template_id"
  *   node api-hub.js send-email --to "a@b.com" --subject "Subject" --body "<html>...</html>"
  *   node api-hub.js send-batch --subject "Hello {{name}}" --body "<html>...</html>" --receivers '[...]'
  */
@@ -753,6 +757,81 @@ async function document(params) {
 }
 
 /**
+ * Send SMS verification code (OTP) via Prelude
+ * @param {object} params - Verify parameters
+ * @param {string} params.phone - Phone number in E.164 format (e.g. "+1234567890")
+ * @param {string} [params.ip] - User's IP address for anti-fraud signals
+ * @param {string} [params.deviceId] - Device identifier for anti-fraud signals
+ * @returns {Promise<object>} Verification result {id, status, method, channels}
+ */
+async function smsVerify(params) {
+  if (!params.phone) {
+    throw new Error('--phone is required (E.164 format, e.g. +1234567890)')
+  }
+
+  const inputs = {
+    target: { type: 'phone_number', value: params.phone },
+  }
+  if (params.ip || params.deviceId) {
+    inputs.signals = {}
+    if (params.ip) inputs.signals.ip = params.ip
+    if (params.deviceId) inputs.signals.device_id = params.deviceId
+  }
+
+  return run({ model: 'prelude/verify-send', inputs })
+}
+
+/**
+ * Check SMS verification code (OTP) via Prelude
+ * @param {object} params - Check parameters
+ * @param {string} params.phone - Phone number in E.164 format
+ * @param {string} params.code - OTP code received via SMS
+ * @returns {Promise<object>} Check result {id, status}
+ */
+async function smsCheck(params) {
+  if (!params.phone) {
+    throw new Error('--phone is required (E.164 format, e.g. +1234567890)')
+  }
+  if (!params.code) {
+    throw new Error('--code is required (the OTP code received via SMS)')
+  }
+
+  const inputs = {
+    target: { type: 'phone_number', value: params.phone },
+    code: params.code,
+  }
+
+  return run({ model: 'prelude/verify-check', inputs })
+}
+
+/**
+ * Send SMS notification via Prelude
+ * @param {object} params - Notify parameters
+ * @param {string} params.phone - Phone number in E.164 format
+ * @param {string} params.templateId - Prelude template ID (configured in Prelude dashboard)
+ * @param {object} [params.variables] - Template variables
+ * @param {string} [params.from] - Sender number
+ * @returns {Promise<object>} Send result
+ */
+async function smsSend(params) {
+  if (!params.phone) {
+    throw new Error('--phone is required (E.164 format, e.g. +1234567890)')
+  }
+  if (!params.templateId) {
+    throw new Error('--template-id is required (configured in Prelude dashboard)')
+  }
+
+  const inputs = {
+    template_id: params.templateId,
+    to: params.phone,
+  }
+  if (params.variables) inputs.variables = params.variables
+  if (params.from) inputs.from = params.from
+
+  return run({ model: 'prelude/notify-send', inputs })
+}
+
+/**
  * List available models from API Hub
  * @param {object} [params] - List parameters
  * @param {string} [params.type] - Filter by category (chat, tts, image, video, scraping, etc.)
@@ -825,6 +904,9 @@ Commands:
   music        Music generation (replicate/elevenlabs, replicate/meta/musicgen)
   document     Document processing (reducto: parse, extract, split, edit)
   gamma        Presentations (gamma)
+  sms-verify   Send OTP verification code (prelude)
+  sms-check    Check OTP verification code (prelude)
+  sms-send     Send SMS notification (prelude)
   send-email   Send a single email (aws/ses)
   send-batch   Send batch emails with templates
   version      Check for updates and show current/latest version
@@ -872,6 +954,11 @@ Examples:
   # Search & Scrape
   node api-hub.js search --model "scrapingdog/google_search" --query "nodejs"
   node api-hub.js scrape --model "firecrawl/scrape" --url "https://example.com"
+
+  # SMS Verification
+  node api-hub.js sms-verify --phone "+1234567890"
+  node api-hub.js sms-check --phone "+1234567890" --code "123456"
+  node api-hub.js sms-send --phone "+1234567890" --template-id "your_template_id"
 
   # Email
   node api-hub.js send-email --to "user@example.com" --subject "Hello" --body "<p>Hi!</p>"
@@ -1174,6 +1261,60 @@ Examples:
         break
       }
 
+      case 'sms-verify': {
+        if (!args.phone) {
+          console.error('Error: --phone is required (E.164 format, e.g. +1234567890)')
+          process.exit(1)
+        }
+        result = await smsVerify({
+          phone: args.phone,
+          ip: args.ip,
+          deviceId: args['device-id'],
+        })
+        console.log(`\nVerification sent to: ${args.phone}`)
+        console.log(`Status: ${result.status}`)
+        console.log(`Verification ID: ${result.id}`)
+        if (result.channels) {
+          console.log(`Channel: ${result.channels.join(', ')}`)
+        }
+        break
+      }
+
+      case 'sms-check': {
+        if (!args.phone || !args.code) {
+          console.error('Error: --phone and --code are required')
+          process.exit(1)
+        }
+        result = await smsCheck({
+          phone: args.phone,
+          code: args.code,
+        })
+        console.log(`\nVerification check for: ${args.phone}`)
+        console.log(`Status: ${result.status}`)
+        if (result.status === 'success') {
+          console.log('Phone number verified successfully!')
+        } else {
+          console.log('Verification failed. Code may be incorrect or expired.')
+        }
+        break
+      }
+
+      case 'sms-send': {
+        if (!args.phone || !args['template-id']) {
+          console.error('Error: --phone and --template-id are required')
+          process.exit(1)
+        }
+        result = await smsSend({
+          phone: args.phone,
+          templateId: args['template-id'],
+          variables: args.variables ? JSON.parse(args.variables) : undefined,
+          from: args.from,
+        })
+        console.log(`\nSMS sent to: ${args.phone}`)
+        console.log(JSON.stringify(result, null, 2))
+        break
+      }
+
       case 'send-email': {
         // Support both --to (new) and --receivers (legacy)
         const toArg = args.to || args.receivers
@@ -1287,6 +1428,11 @@ module.exports = {
   document,
   gamma,
   listModels,
+
+  // SMS/Verify
+  smsVerify,
+  smsCheck,
+  smsSend,
 
   // Email
   sendEmail,

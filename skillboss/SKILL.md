@@ -16,6 +16,8 @@ Use this skill when the user wants to:
 - **Accept payments**: Stripe integration for subscriptions, one-time payments, e-commerce
 - **Add authentication**: Login/signup with Google OAuth or email OTP
 - **Generate AI content**: Images (Gemini, Flux, DALL-E), audio/TTS (ElevenLabs, Minimax), music (MusicGen, Lyria), videos (Veo), chat (50+ LLMs)
+- **SMS verification**: Phone number verification via OTP (send code, check code) using Prelude
+- **Send SMS notifications**: Transactional SMS messages via Prelude templates
 - **Send emails**: Single or batch emails with templates
 - **Create presentations**: Slides and pitch decks via Gamma AI
 - **Process documents**: Parse PDFs/DOCX to markdown, extract structured data, split documents, fill PDF forms (Reducto)
@@ -57,6 +59,20 @@ node ./skillboss/scripts/api-hub.js document --model "reducto/extract" --url "ht
 ### Text-to-speech:
 ```bash
 node ./skillboss/scripts/api-hub.js tts --model "minimax/speech-01-turbo" --text "Hello world" --output /tmp/hello.mp3
+```
+
+### SMS verification (OTP):
+```bash
+# Step 1: Send OTP code to phone number
+node ./skillboss/scripts/api-hub.js sms-verify --phone "+1234567890"
+
+# Step 2: Check the code (after user receives it)
+node ./skillboss/scripts/api-hub.js sms-check --phone "+1234567890" --code "123456"
+```
+
+### Send SMS notification:
+```bash
+node ./skillboss/scripts/api-hub.js sms-send --phone "+1234567890" --template-id "your_template_id"
 ```
 
 ### Generate music:
@@ -102,6 +118,9 @@ node ./skillboss/scripts/stripe-connect.js
 | `scrape` | Web scraping (model required) | `--model`, `--url`/`--urls` |
 | `document` | Document processing (model required) | `--model`, `--url`, `--schema`, `--split-description`, `--instructions`, `--output` |
 | `gamma` | Presentations | `--model`, `--input-text`, `--format` (presentation/document/social/webpage) |
+| `sms-verify` | Send OTP verification code | `--phone` (E.164), `--ip`, `--device-id` |
+| `sms-check` | Check OTP verification code | `--phone` (E.164), `--code` |
+| `sms-send` | Send SMS notification | `--phone` (E.164), `--template-id`, `--variables`, `--from` |
 | `send-email` | Single email | `--to`, `--subject`, `--body`, `--reply-to` |
 | `send-batch` | Batch emails | `--receivers`, `--subject`, `--body` |
 | `publish-static` | Publish to R2 | `<folder>`, `--project-id`, `--version` |
@@ -122,6 +141,7 @@ node ./skillboss/scripts/stripe-connect.js
 | Video | `mm/t2v` (text-to-video), `mm/i2v` (image-to-video), `vertex/veo-3.1-fast-generate-preview` |
 | Music | `replicate/elevenlabs/music`, `replicate/meta/musicgen`, `replicate/google/lyria-2` |
 | Document | `reducto/parse`, `reducto/extract`, `reducto/split`, `reducto/edit` |
+| SMS/Verify | `prelude/verify-send`, `prelude/verify-check`, `prelude/notify-send`, `prelude/notify-batch` |
 | Presentation | `gamma/generation` |
 
 For complete model list and detailed parameters, see `reference.md`.
@@ -620,6 +640,67 @@ async function parseDocument(url: string): Promise<object> {
   // Response: { result: { blocks: [...], ... }, usage: { credits: N } }
 }
 
+// ============================================================================
+// SMS VERIFICATION (Prelude)
+// ============================================================================
+// Step 1: Send OTP code
+async function sendVerificationCode(phoneNumber: string, ip?: string): Promise<object> {
+  const inputs: Record<string, unknown> = {
+    target: { type: 'phone_number', value: phoneNumber }
+  }
+  if (ip) inputs.signals = { ip }
+
+  const response = await fetch(`${API_BASE}/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SKILLBOSS_API_KEY}`
+    },
+    body: JSON.stringify({ model: 'prelude/verify-send', inputs })
+  })
+  return response.json()
+  // Response: { id: "vrf_...", status: "success", method: "message", channels: ["sms"] }
+}
+
+// Step 2: Verify OTP code
+async function checkVerificationCode(phoneNumber: string, code: string): Promise<object> {
+  const response = await fetch(`${API_BASE}/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SKILLBOSS_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'prelude/verify-check',
+      inputs: {
+        target: { type: 'phone_number', value: phoneNumber },
+        code
+      }
+    })
+  })
+  return response.json()
+  // Response: { id: "vrf_...", status: "success" }  (or "failure" / "expired_or_not_found")
+}
+
+// Send SMS notification (requires template configured in Prelude dashboard)
+async function sendSmsNotification(phoneNumber: string, templateId: string, variables?: Record<string, string>): Promise<object> {
+  const inputs: Record<string, unknown> = {
+    template_id: templateId,
+    to: phoneNumber
+  }
+  if (variables) inputs.variables = variables
+
+  const response = await fetch(`${API_BASE}/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SKILLBOSS_API_KEY}`
+    },
+    body: JSON.stringify({ model: 'prelude/notify-send', inputs })
+  })
+  return response.json()
+}
+
 async function extractFromDocument(url: string, schema: object): Promise<object> {
   const response = await fetch(`${API_BASE}/run`, {
     method: 'POST',
@@ -654,6 +735,9 @@ async function extractFromDocument(url: string, schema: object): Promise<object>
 | Video | vertex/veo-* | `generatedSamples[0].video.uri` or `videos[0]` |
 | Document | reducto/parse | `result` (parsed markdown), `usage.credits` |
 | Document | reducto/extract | `result` (extracted fields), `usage.credits` |
+| SMS Verify | prelude/verify-send | `id`, `status`, `method`, `channels` |
+| SMS Check | prelude/verify-check | `id`, `status` ("success", "failure", "expired_or_not_found") |
+| SMS Notify | prelude/notify-send | Provider response |
 
 ### Setup Steps
 1. Read API key from `skillboss/config.json`
